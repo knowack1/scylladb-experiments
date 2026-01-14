@@ -1,0 +1,21 @@
+[package]
+name = "cdc-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.97"
+async-trait = "0.1.88"
+clap = { version = "4.5.40", features = ["derive"] }
+futures = "0.3.31"
+itertools = "0.14.0"
+rustls = "0.23"
+rustls-pki-types = "1.13.1"
+scylla = { version = "1.2.0", features = ["time-03", "rustls-023"] }
+scylla-cdc = "0.5.0"
+thiserror = "2.0.12"
+time = { version = "0.3.41", features = ["formatting"] }
+tokio = { version = "1.44.2", features = ["full"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+uuid = "1.16.0"
