@@ -1,0 +1,12 @@
+-- ScyllaDB FTS demo — articles table (Wikipedia-style corpus).
+--
+-- Design note: FTS rejects ANY WHERE restriction other than the BM25() clause
+-- itself (no partition key, clustering key, or secondary-index predicate). So
+-- there is no query value in putting title / author in the primary key — the
+-- engine only supports GLOBAL search over the indexed text column. article_id
+-- is therefore the sole partition key (pure identity). `title` and `author` are
+-- carried for DISPLAY of results only; `author` also stands in for the
+-- filter-alongside-BM25 case that is rejected today (see scenarios/m2).
+--
+-- `article` is the full-text (BM25) indexed column — the article body.
+CREATE TABLE IF NOT EXISTS wikipedia.articles (article_id uuid PRIMARY KEY, title text, author text, article text);
