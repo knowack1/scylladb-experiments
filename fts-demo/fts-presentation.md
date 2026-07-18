@@ -13,7 +13,16 @@ A CQL demo — BM25 full-text & vector search
 
 ---
 
-## Slide 2 — The demo: CQL I'll run
+## Slide 2 — Why FTS still matters today (RAG & agentic AI)
+
+- Vector/semantic search wins on **meaning & paraphrase**, but is **blind to tokens with no semantic content**: error codes (`E1102`), surnames, SKUs, UUIDs, config keys, function names — embeddings blur exact identifiers into noise.
+- RAG answer quality hinges on **exact-term recall**: "why do I get error E1102?" must retrieve the doc literally containing `E1102`, not the semantically "nearest" paragraph.
+- Agentic tools need **deterministic, explainable lookups** — ticket by ID, customer by surname, log line by code — where BM25 keyword match beats cosine similarity.
+- Modern retrieval is **hybrid**: BM25 (lexical/exact) + vector (semantic), fused. FTS isn't legacy — it's half of production RAG (see M2 hybrid, Slide 5).
+
+---
+
+## Slide 3 — The demo: CQL I'll run
 
 - **One table, one index** — text column `message` + a custom index; creating it auto-enables CDC, then wait for `SERVING`:
   ```sql
@@ -29,7 +38,7 @@ A CQL demo — BM25 full-text & vector search
 
 ---
 
-## Slide 3 — Architecture: ScyllaDB ↔ vector-store
+## Slide 4 — Architecture: ScyllaDB ↔ vector-store
 
 ```mermaid
 flowchart LR
@@ -51,9 +60,9 @@ flowchart LR
 
 ---
 
-## Slide 4 — Future milestones
+## Slide 5 — Future milestones
 
 - **M2 — filtered & scoped FTS:** allow extra `WHERE` beside BM25 — filter by `sender_id`, scope to a `chat_id`, date ranges (the queries that fail today).
-- **M2 — hybrid search:** combine BM25 + vector ANN in one query, fused with `USING FUSION = {RRF | WEIGHTED}`.
+- **M2 — hybrid search:** combine BM25 + vector ANN in one query, fused with `USING FUSION = {RRF | WEIGHTED}` — the exact-match + semantic combo RAG needs.
 - **M3 — richer matching:** enable fuzzy (`term~N`) and prefix/wildcard (`term*`) — already parsed by Tantivy, not yet served.
 - **Hardening:** per-language analyzers & stemming, index durability / faster rebuild (today in-RAM, rebuilt on restart), and read-after-write consistency.
