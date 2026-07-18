@@ -1,108 +1,103 @@
 # ScyllaDB Full-Text Search — CQL Demo
 
-A runnable, honest demo of ScyllaDB's full-text search (BM25) and vector search,
-built around a synthetic chat dataset. Everything is plain CQL you apply with
-`cqlsh` — schema, seed data (embeddings inlined), and copy-pasteable scenario
-queries. It shows what works natively today and proves the roadmap gaps live via
-the real server errors.
+A runnable, honest demo of ScyllaDB's full-text search (BM25) and vector search
+over a synthetic chat dataset. Everything is plain CQL you apply with `cqlsh`.
+Embeddings are precomputed and inlined, so nothing here needs an embedding model
+or extra tooling. It shows what works natively today and proves the roadmap gaps
+live via the real server errors.
 
-## What the customer asked for, and what actually works
+## Capabilities
 
-| Ask | Status |
-|---|---|
-| Exact / phrase search | ✅ native |
-| Filter + full-text (sender, date) | 🛣️ later milestone (proven via server error live) |
-| Vector / semantic search | ✅ native, as a separate ANN query |
+✅ native today · 🛣️ later milestone (proven via the live server error).
 
-Fuzzy (`term~N`) and prefix (`term*`) matching are **Milestone 3** and out of
-scope for this build.
-
-Full detail with the exact server errors is in
-[docs/capability-matrix.md](docs/capability-matrix.md).
+| Capability                                         | Status                 |
+| -------------------------------------------------- | ---------------------- |
+| Exact / phrase search                              | ✅                      |
+| Relevance ranking (BM25)                           | ✅                      |
+| Boolean `AND` / `OR` / `NOT`, grouping             | ✅                      |
+| Vector / semantic search                           | ✅ (separate ANN query) |
+| Filter + full-text (sender, date), in-chat scoping | 🛣️ Milestone 2          |
+| Hybrid BM25 + vector in one query                  | 🛣️ Milestone 2          |
+| Fuzzy (`term~N`) / prefix (`term*`) matching       | 🛣️ Milestone 3          |
 
 ## Prerequisites
 
-- A running ScyllaDB build with full-text search (the vector-store must be wired
-  up, since the fulltext and vector indexes are served by it). See
-  [docs/architecture.md](docs/architecture.md) for how the pieces fit together.
+- A running ScyllaDB build with full-text search, with the vector-store wired up
+  (it serves both the fulltext and vector indexes).
 - `cqlsh` (or any CQL client) pointed at that cluster.
-
-Embeddings are precomputed and inlined into `cql/04_seed_data.cql` and
-`cql/vector/scenarios_vector.cql`, so nothing here needs an embedding model,
-Python, or extra tooling.
 
 ## Quickstart
 
-The demo is split into two tracks that share one schema and dataset: `cql/fts/`
-(full-text BM25) and `cql/vector/` (semantic ANN). Apply the shared setup, then
-pick a track (or run both) and wait a few seconds for the index to report
-`SERVING` before querying:
+Two tracks share one schema and dataset: full-text (BM25) and vector (semantic
+ANN). Apply the shared setup, then run either track — wait a few seconds for the
+index to reach `SERVING` before querying.
 
 ```bash
 # Shared setup (run once)
 cqlsh -f cql/01_keyspace.cql
 cqlsh -f cql/02_tables.cql
+cqlsh -f cql/04_seed_data.cql   # 101 messages, embeddings inlined
 
-# Full-text (BM25) track
+# Full-text (BM25) track — wait for SERVING after the index step
 cqlsh -f cql/fts/03_index_fts.cql
-cqlsh -f cql/04_seed_data.cql
-# wait ~a few seconds for CDC to build the fulltext index, then:
-for f in cql/fts/m1/*.cql; do cqlsh -f "$f"; done                 # BM25 scenarios that work natively
-for f in cql/fts/m2/*.cql cql/fts/m3/*.cql; do cqlsh -f "$f"; done # later-milestone queries that FAIL today
+for f in cql/fts/m1/*.cql; do cqlsh -f "$f"; done                 # work natively
+for f in cql/fts/m2/*.cql cql/fts/m3/*.cql; do cqlsh -f "$f"; done # FAIL today (later milestones)
 
-# Vector (semantic) track
+# Vector (semantic) track — wait for SERVING after the index step
 cqlsh -f cql/vector/03_index_vector.cql
-cqlsh -f cql/04_seed_data.cql             # same shared seed; skip if already applied
-# wait ~a few seconds for CDC to build the vector index, then:
-cqlsh -f cql/vector/scenarios_vector.cql  # vector (semantic) ANN query
+cqlsh -f cql/vector/scenarios_vector.cql
+
+cqlsh -f cql/99_teardown.cql    # start over: drops indexes, table, keyspace
 ```
 
-To start over: `cqlsh -f cql/99_teardown.cql` drops the indexes, table, and
-keyspace.
+## FTS query shape and rules
+
+The only valid full-text query shape is:
+
+```sql
+SELECT ... WHERE BM25(col, '<q>') > 0 ORDER BY BM25(col, '<q>') LIMIT <n>;
+```
+
+Each rule below, if violated, raises a specific `InvalidRequest`:
+
+- `LIMIT` is mandatory and must be `<= 1000`.
+- The search term must be identical in `WHERE` and `ORDER BY`.
+- No other `WHERE` restriction is allowed (partition, clustering, or secondary).
+- `BM25(...)` cannot appear in the `SELECT` list.
+
+The query string is parsed by Tantivy. Milestone 1 supports single terms,
+`AND` / `OR` / `NOT`, `"phrases"`, and `(grouping)`; fuzzy (`term~N`) and prefix
+(`term*`) are Milestone 3. The analyzer is a simple tokenizer + lowercase +
+English stop words — **no stemming** ("run" does not match "running").
 
 ## Interactive queries
 
 Open `cqlsh`, run `USE chat;`, and paste any statement from the per-scenario
-files in `cql/fts/m1/`, for example:
+files, for example:
 
 ```sql
 SELECT message_id, message FROM messages WHERE BM25(message, 'scylladb') > 0 ORDER BY BM25(message, 'scylladb') LIMIT 10;
 SELECT message_id, message FROM messages WHERE BM25(message, '"scylladb full text search"') > 0 ORDER BY BM25(message, '"scylladb full text search"') LIMIT 10;
 SELECT message_id, message FROM messages WHERE BM25(message, 'scylladb AND benchmark') > 0 ORDER BY BM25(message, 'scylladb AND benchmark') LIMIT 10;
-SELECT message_id, message FROM messages WHERE BM25(message, '(bali OR vacation) AND flights NOT cancelled') > 0 ORDER BY BM25(message, '(bali OR vacation) AND flights NOT cancelled') LIMIT 10;
 ```
-
-The vector (semantic) query and the roadmap failures are in their own files so you
-can run them deliberately.
 
 ## Layout
 
-- `cql/` — everything you run:
-  - Shared setup (both tracks):
-    - `01_keyspace.cql` — keyspace (tablets required for a fulltext index).
-    - `02_tables.cql` — one `messages` table (text column + `vector<float, 384>`).
-    - `04_seed_data.cql` — 101 messages with embeddings inlined (cqlsh-loadable);
-      the last row is an analyzer fixture with no embedding (FTS-only).
-    - `99_teardown.cql` — drop everything (both indexes, table, keyspace).
-  - `fts/` — full-text (BM25) track:
-    - `03_index_fts.cql` — the `fulltext_index`.
-    - `query_rules.cql` — the valid FTS query shape, its rules, and track pointers.
-    - `m1/` — one file per BM25 scenario that works natively (Milestone 1);
-      files `08`–`10` also demonstrate the analyzer itself (case folding,
-      stop-word removal, punctuation tokenization).
-    - `m2/` — one file per extra-WHERE / hybrid query that fails today (Milestone 2),
-      each with the exact server error to expect.
-    - `m3/` — one file per fuzzy / prefix query, parsed but not enabled (Milestone 3).
-  - `vector/` — vector (semantic) track:
-    - `03_index_vector.cql` — the `vector_index`.
-    - `scenarios_vector.cql` — the runnable ANN (semantic) query, vector inlined.
-- `docs/` — capability matrix, run-of-show, architecture, verification.
+- `cql/` — shared setup: `01_keyspace.cql` (tablets required for a fulltext
+  index), `02_tables.cql` (`messages` table with a text column and
+  `vector<float, 384>`), `04_seed_data.cql`, `99_teardown.cql`.
+- `cql/fts/` — BM25 track: `03_index_fts.cql`, plus one file per scenario in
+  `m1/` (native; `08`–`10` also demonstrate the analyzer), `m2/` (extra-WHERE /
+  hybrid queries that fail today, each with the exact server error), and `m3/`
+  (fuzzy / prefix, parsed but not enabled).
+- `cql/vector/` — semantic track: `03_index_vector.cql` and
+  `scenarios_vector.cql` (the runnable ANN query, vector inlined).
 
-## Important operational notes
+## Operational notes
 
-- The tantivy FTS index is in-memory with a ~3s commit interval. Freshly inserted
-  messages are searchable a few seconds later; a vector-store restart drops the
-  index and rebuilds it by scanning the base table. Do not restart the
-  vector-store mid-demo.
-- Full-text queries always require a `LIMIT` (≤ 1000) and cannot carry any filter
-  beyond the BM25 clause. See [docs/architecture.md](docs/architecture.md).
+- The tantivy FTS index is in-memory with a ~3s commit interval, so freshly
+  inserted messages are searchable a few seconds later. A vector-store restart
+  drops and rebuilds it by scanning the base table — **do not restart the
+  vector-store mid-demo**.
+- Full-text queries always require a `LIMIT` (`<= 1000`) and cannot carry any
+  filter beyond the BM25 clause.
