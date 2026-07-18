@@ -28,20 +28,13 @@ its own self-contained `vs-demo/`; the two share nothing.
 
 ## Quickstart
 
-Apply the setup, then run the scenarios — wait a few seconds for the index to
-reach `SERVING` before querying.
+Open `cqlsh` from this directory and follow [`demo.md`](demo.md) top to bottom,
+pasting each block in order — setup, then the seed (`SOURCE 'cql/data_seed.cql';`),
+then the index (wait a few seconds for `SERVING`), then the M1 / M2 / M3 scenarios.
 
 ```bash
-cqlsh -f cql/00_teardown.cql    # start clean: drops the wikipedia keyspace and everything in it
-cqlsh -f cql/01_keyspace.cql
-cqlsh -f cql/02_tables.cql
-cqlsh -f cql/04_seed_data.cql   # 18 articles
-
-cqlsh -f cql/03_index_fts.cql   # wait for SERVING before the next step
-for f in cql/scenarios/m1/*.cql; do cqlsh -f "$f"; done                       # work natively
-for f in cql/scenarios/m2/*.cql cql/scenarios/m3/*.cql; do cqlsh -f "$f"; done # FAIL today (later milestones)
-
-cqlsh -f cql/00_teardown.cql    # start over: drops the wikipedia keyspace and everything in it
+cd fts-demo
+cqlsh   # then paste the blocks from demo.md in order
 ```
 
 ## FTS query shape and rules
@@ -66,8 +59,8 @@ English stop words — **no stemming** ("run" does not match "running").
 
 ## Interactive queries
 
-Open `cqlsh`, run `USE wikipedia;`, and paste any statement from the
-per-scenario files, for example:
+Open `cqlsh`, run `USE wikipedia;`, and paste any statement from
+[`demo.md`](demo.md), for example:
 
 ```sql
 SELECT article_id, title FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
@@ -77,15 +70,16 @@ SELECT article_id, title FROM articles WHERE BM25(article, 'python NOT snake') >
 
 ## Layout
 
-- `cql/` — setup: `01_keyspace.cql`, `02_tables.cql` (`articles` table:
-  `article_id`, `title`, `author`, `article`), `04_seed_data.cql` (18 articles),
-  `03_index_fts.cql` (the fulltext index), `00_teardown.cql`.
-- `cql/scenarios/` — one file per scenario:
-  - `m1/` — native today (`01`–`07` search + boolean; `08`–`10` demonstrate the
-    analyzer: case folding, stop words, punctuation).
-  - `m2/` — extra-`WHERE` queries that fail today (filter by author, restrict by
+- `demo.md` — the step-by-step runbook: teardown → keyspace → table
+  (`articles`: `article_id`, `title`, `author`, `article`) → seed → fulltext index,
+  then the scenarios:
+  - **M1** — native today (global / phrase search, BM25 ranking, boolean
+    AND/OR/NOT + grouping, and the analyzer: case folding, stop words, punctuation).
+  - **M2** — extra-`WHERE` queries that fail today (filter by author, restrict by
     article id), each with the exact server error.
-  - `m3/` — fuzzy / prefix (parsed by Tantivy, not enabled today).
+  - **M3** — fuzzy / prefix (parsed by Tantivy, not enabled today).
+- `cql/data_seed.cql` — the 18 articles, pulled in from `demo.md` via
+  cqlsh's `SOURCE` (kept as CQL because the `INSERT`s are bulky).
 
 ## Operational notes
 

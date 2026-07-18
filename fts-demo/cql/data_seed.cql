@@ -9,8 +9,9 @@
 -- A small set of author names (Jane Doe, John Smith, Maria Garcia, Wei Chen,
 -- Priya Patel) is reused across articles so author filtering is meaningful.
 --
--- Apply after 01_keyspace, 02_tables, and 03_index_fts. The fulltext index picks
--- these rows up via CDC within a few seconds of insertion.
+-- Pulled in from demo.md via cqlsh `SOURCE 'cql/data_seed.cql';` once the
+-- wikipedia.articles table exists. The fulltext index picks these rows up via CDC
+-- within a few seconds of insertion.
 
 USE wikipedia;
 
