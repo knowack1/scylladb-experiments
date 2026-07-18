@@ -1,7 +1,7 @@
 # ScyllaDB Full-Text Search — CQL Demo
 
 A runnable, honest demo of ScyllaDB's full-text search (BM25) over a small
-Wikipedia-style article corpus. Everything is plain CQL you apply with `cqlsh` —
+blog of short explainer posts. Everything is plain CQL you apply with `cqlsh` —
 no embedding model, no extra tooling. It shows what works natively today and
 proves the roadmap gaps live via the real server errors.
 
@@ -59,7 +59,7 @@ English stop words — **no stemming** ("run" does not match "running").
 
 ## Interactive queries
 
-Open `cqlsh`, run `USE wikipedia;`, and paste any statement from
+Open `cqlsh`, run `USE blog;`, and paste any statement from
 [`demo.md`](demo.md), for example:
 
 ```sql

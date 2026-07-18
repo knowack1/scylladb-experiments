@@ -1,19 +1,19 @@
--- ScyllaDB FTS demo — seed data (18 Wikipedia-style articles, no embeddings).
+-- ScyllaDB FTS demo — seed data (18 short explainer blog posts, no embeddings).
 --
 -- Hand-authored plain text — this demo is pure full-text search, so there are no
 -- embeddings to precompute and the file stays small and editable.
 --
 -- article_id is a fixed UUID per article, so re-applying is idempotent (same id
 -- -> upsert). Article bodies carry the deterministic "needle" terms every query
--- in scenarios/ relies on (photosynthesis, relativity, jupiter, python, ...).
+-- in demo.md relies on (photosynthesis, relativity, jupiter, python, ...).
 -- A small set of author names (Jane Doe, John Smith, Maria Garcia, Wei Chen,
 -- Priya Patel) is reused across articles so author filtering is meaningful.
 --
 -- Pulled in from demo.md via cqlsh `SOURCE 'cql/data_seed.cql';` once the
--- wikipedia.articles table exists. The fulltext index picks these rows up via CDC
+-- blog.articles table exists. The fulltext index picks these rows up via CDC
 -- within a few seconds of insertion.
 
-USE wikipedia;
+USE blog;
 
 INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000001, 'Photosynthesis', 'Jane Doe', 'Photosynthesis is the process by which green plants and some other organisms convert light energy into chemical energy. Using chlorophyll, plants absorb carbon dioxide and water and release oxygen. This process powers nearly all life on Earth and forms the base of the food chain.');
 

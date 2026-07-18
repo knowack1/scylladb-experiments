@@ -1,7 +1,7 @@
 # ScyllaDB Full-Text Search — CQL demo runbook
 
 A step-by-step, copy-paste demo of ScyllaDB's full-text search (BM25) over 18
-Wikipedia-style articles. Open `cqlsh` **from the `fts-demo/` directory** and paste
+short explainer blog posts. Open `cqlsh` **from the `fts-demo/` directory** and paste
 each block below in order. After creating the index, wait a few seconds for it to
 reach `SERVING` before running any query.
 
@@ -16,15 +16,13 @@ Dropping the keyspace removes the table and its fulltext index too, but we drop 
 index and table first so re-running is explicit and order-safe.
 
 ```sql
-DROP INDEX IF EXISTS wikipedia.articles_body_fts;
-DROP TABLE IF EXISTS wikipedia.articles;
-DROP KEYSPACE IF EXISTS wikipedia;
+DROP KEYSPACE IF EXISTS blog;
 ```
 
 ## 2. Keyspace
 
 ```sql
-CREATE KEYSPACE IF NOT EXISTS wikipedia;
+CREATE KEYSPACE IF NOT EXISTS blog;
 ```
 
 ## 3. Table
@@ -37,7 +35,7 @@ that is rejected today (see M2). `article` is the full-text (BM25) indexed colum
 the article body.
 
 ```sql
-CREATE TABLE IF NOT EXISTS wikipedia.articles (article_id uuid PRIMARY KEY, title text, author text, article text);
+CREATE TABLE IF NOT EXISTS blog.articles (article_id uuid PRIMARY KEY, title text, author text, article text);
 ```
 
 ## 4. Seed data (18 articles)
@@ -59,7 +57,7 @@ that scan completes. Until then, queries return an error (the vector-store retur
 503) — **wait a few seconds before the next step.**
 
 ```sql
-CREATE CUSTOM INDEX IF NOT EXISTS articles_body_fts ON wikipedia.articles(article) USING 'fulltext_index';
+CREATE CUSTOM INDEX IF NOT EXISTS articles_body_fts ON blog.articles(article) USING 'fulltext_index';
 ```
 
 ## 6. Select the keyspace
@@ -67,7 +65,7 @@ CREATE CUSTOM INDEX IF NOT EXISTS articles_body_fts ON wikipedia.articles(articl
 Run this once so the scenario queries below need no keyspace prefix.
 
 ```sql
-USE wikipedia;
+USE blog;
 ```
 
 ---
@@ -237,10 +235,10 @@ SELECT article_id, title FROM articles WHERE BM25(article, 'photo*') > 0 ORDER B
 
 ## Start over
 
-Drops the wikipedia keyspace and everything in it, so you can re-run from the top.
+Drops the blog keyspace and everything in it, so you can re-run from the top.
 
 ```sql
-DROP INDEX IF EXISTS wikipedia.articles_body_fts;
-DROP TABLE IF EXISTS wikipedia.articles;
-DROP KEYSPACE IF EXISTS wikipedia;
+DROP INDEX IF EXISTS blog.articles_body_fts;
+DROP TABLE IF EXISTS blog.articles;
+DROP KEYSPACE IF EXISTS blog;
 ```
