@@ -57,7 +57,7 @@ Confirm the 18 rows loaded — this reads every partition, which is exactly what
 lets you avoid later. It also previews all 18 short article bodies.
 
 ```sql
-SELECT article FROM articles;
+SELECT article_id, articl FROM articles;
 ```
 
 ## 5. Full-text index
@@ -89,7 +89,20 @@ Find every article that mentions photosynthesis. Returns the Photosynthesis,
 Chlorophyll, and Oxygen articles — one query, no partition scan.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
+SELECT article_id, articl FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
+```
+
+### Phrase without quotes
+
+Drop the quotation marks and the analyzer treats the input as independent tokens
+rather than a phrase — `of` is removed as a stop word (see Stop-word removal),
+leaving `theory` and `relativity` matched by position, order and adjacency
+ignored. So this returns all three physics articles that mention both terms —
+including the Albert Einstein article (`relativity theory`) that the quoted phrase
+below excludes precisely because its words are reversed.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'theory of relativity') > 0 ORDER BY BM25(article, 'theory of relativity') LIMIT 10;
 ```
 
 ### Exact phrase
@@ -99,7 +112,7 @@ where those three tokens are adjacent — the Theory of relativity and Black hol
 articles, not the Einstein one (`relativity theory`).
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
 ```
 
 ### Relevance ranking
@@ -109,7 +122,7 @@ order is legible from the text — only the ScyllaDB and Cassandra articles ment
 `database`, so both come back ranked by BM25.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
 ```
 
 ### Boolean AND
