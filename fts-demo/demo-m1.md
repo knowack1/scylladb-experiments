@@ -1,4 +1,4 @@
-# ScyllaDB Full-Text Search — CQL demo runbook
+# ScyllaDB Full-Text Search — native today
 
 A step-by-step, copy-paste demo of ScyllaDB's full-text search (BM25) over 21
 short explainer blog posts. Open `cqlsh` **from the `fts-demo/` directory** and paste
@@ -206,65 +206,4 @@ Trailing punctuation is stripped: `throughput` matches `high-throughput,`.
 
 ```sql
 SELECT article FROM articles WHERE BM25(article, 'throughput') > 0 ORDER BY BM25(article, 'throughput') LIMIT 10;
-```
-
----
-
-# Rejected today
-
-These combine a filter with the BM25 clause. Both **fail today** with:
-
-> Full-text search queries do not support additional WHERE restrictions
-
-### Filter by author
-
-`relativity` matches three articles (two by John Smith, one by Wei Chen); the
-author predicate would narrow them, but it cannot be combined with BM25 today.
-
-```sql
-SELECT article FROM articles WHERE BM25(article, 'relativity') > 0 AND author = 'John Smith' ORDER BY BM25(article, 'relativity') LIMIT 10;
-```
-
-### Restrict by article id
-
-Scoping to one article by its partition key fails with the same error — the
-partition key is no exception. (The id below is the Theory of relativity article.)
-
-```sql
-SELECT article FROM articles WHERE BM25(article, 'relativity') > 0 AND article_id = a0000000-0000-4000-8000-000000000002 ORDER BY BM25(article, 'relativity') LIMIT 10;
-```
-
----
-
-# Parsed, not enabled
-
-The `~N` and `*` operators are parsed by Tantivy but not enabled, so both queries
-below **match nothing today**.
-
-### Fuzzy match (edit distance)
-
-`reletivity~1` should match `relativity` within one edit.
-
-```sql
-SELECT article FROM articles WHERE BM25(article, 'reletivity~1') > 0 ORDER BY BM25(article, 'reletivity~1') LIMIT 10;
-```
-
-### Prefix / wildcard
-
-`photo*` should match photosynthesis, etc. Only trailing wildcards are planned.
-
-```sql
-SELECT article FROM articles WHERE BM25(article, 'photo*') > 0 ORDER BY BM25(article, 'photo*') LIMIT 10;
-```
-
----
-
-## Start over
-
-Drops the blog keyspace and everything in it, so you can re-run from the top.
-
-```sql
-DROP INDEX IF EXISTS blog.articles_body_fts;
-DROP TABLE IF EXISTS blog.articles;
-DROP KEYSPACE IF EXISTS blog;
 ```
