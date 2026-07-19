@@ -78,7 +78,7 @@ SELECT article FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER B
   - **M2** — extra-`WHERE` queries that fail today (filter by author, restrict by
     article id), each with the exact server error.
   - **M3** — fuzzy / prefix (parsed by Tantivy, not enabled today).
-- `cql/data_seed.cql` — the 18 articles, pulled in from `demo.md` via
+- `cql/data_seed.cql` — the 21 articles, pulled in from `demo.md` via
   cqlsh's `SOURCE` (kept as CQL because the `INSERT`s are bulky).
 
 ## Operational notes

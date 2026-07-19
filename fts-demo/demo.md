@@ -1,6 +1,6 @@
 # ScyllaDB Full-Text Search — CQL demo runbook
 
-A step-by-step, copy-paste demo of ScyllaDB's full-text search (BM25) over 18
+A step-by-step, copy-paste demo of ScyllaDB's full-text search (BM25) over 21
 short explainer blog posts. Open `cqlsh` **from the `fts-demo/` directory** and paste
 each block below in order. After creating the index, wait a few seconds for it to
 reach `SERVING` before running any query.
@@ -43,9 +43,9 @@ article body.
 CREATE TABLE articles (article_id uuid PRIMARY KEY, title text, author text, article text);
 ```
 
-## 4. Seed data (18 articles)
+## 4. Seed data (21 articles)
 
-The 18 `INSERT`s live in `cql/data_seed.cql` and are pulled in with cqlsh's `SOURCE`
+The 21 `INSERT`s live in `cql/data_seed.cql` and are pulled in with cqlsh's `SOURCE`
 meta-command. The path resolves relative to the directory cqlsh was launched from,
 so start cqlsh from `fts-demo/` (or adjust the path).
 
@@ -53,11 +53,11 @@ so start cqlsh from `fts-demo/` (or adjust the path).
 SOURCE 'cql/data_seed.cql';
 ```
 
-Confirm the 18 rows loaded — this reads every partition, which is exactly what FTS
-lets you avoid later. It also previews all 18 short article bodies.
+Confirm the 21 rows loaded — this reads every partition, which is exactly what FTS
+lets you avoid later. It also previews all 21 short article bodies.
 
 ```sql
-SELECT article_id, articl FROM articles;
+SELECT article_id, article FROM articles;
 ```
 
 ## 5. Full-text index
@@ -89,7 +89,7 @@ Find every article that mentions photosynthesis. Returns the Photosynthesis,
 Chlorophyll, and Oxygen articles — one query, no partition scan.
 
 ```sql
-SELECT article_id, articl FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
 ```
 
 ### Phrase without quotes
@@ -117,17 +117,20 @@ SELECT article_id, article FROM articles WHERE BM25(article, '"theory of relativ
 
 ### Relevance ranking
 
-A common term returns several rows, BM25-ranked. No score is returned, but the
-order is legible from the text — only the ScyllaDB and Cassandra articles mention
-`database`, so both come back ranked by BM25.
+A common term returns several rows, BM25-ranked — and here relevance reduces to one
+visible rule: **how many times each article says the query term.** Five articles
+mention `database`; ScyllaDB says it most (four times), then Apache Cassandra
+(three), Amazon DynamoDB (two), and MongoDB and PostgreSQL once each — so they come
+back in exactly that order. No score is projected; the ranking is legible from the
+text.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 5;
 ```
 
 ### Boolean AND
 
-Both terms required. Narrows the database articles to the two that also mention
+Both terms required. Narrows the five database articles to the two that also mention
 `distributed` (ScyllaDB and Apache Cassandra).
 
 ```sql

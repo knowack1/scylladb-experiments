@@ -1,4 +1,4 @@
--- ScyllaDB FTS demo — seed data (18 short explainer blog posts, no embeddings).
+-- ScyllaDB FTS demo — seed data (21 short explainer blog posts, no embeddings).
 --
 -- Hand-authored plain text — this demo is pure full-text search, so there are no
 -- embeddings to precompute and the file stays small and editable.
@@ -30,9 +30,9 @@ INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-
 
 INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000007, 'Python (genus)', 'Jane Doe', 'The python is a large constricting snake found in Africa, Asia, and Australia.');
 
-INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000008, 'ScyllaDB', 'John Smith', 'ScyllaDB is a distributed wide-column database built for high-throughput, low-latency workloads.');
+INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000008, 'ScyllaDB', 'John Smith', 'ScyllaDB is a distributed wide-column database, a NoSQL database built for high-throughput, low-latency workloads that keep the database fast as the database scales.');
 
-INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000009, 'Apache Cassandra', 'John Smith', 'Apache Cassandra is a distributed wide-column NoSQL database with no single point of failure.');
+INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000009, 'Apache Cassandra', 'John Smith', 'Apache Cassandra is a distributed wide-column NoSQL database, an open-source database designed so the database has no single point of failure.');
 
 INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000010, 'Great Barrier Reef', 'Maria Garcia', 'The Great Barrier Reef is the world''s largest coral reef system off Queensland, Australia.');
 
@@ -51,3 +51,9 @@ INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-
 INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000017, 'Oxygen', 'Wei Chen', 'Most atmospheric oxygen on Earth is produced by photosynthesis in plants and algae.');
 
 INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000018, 'Milky Way', 'Maria Garcia', 'The Milky Way is the barred spiral galaxy that contains our Solar System.');
+
+INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000019, 'Amazon DynamoDB', 'Priya Patel', 'Amazon DynamoDB is a fully managed key-value database, a serverless database that scales automatically for internet-scale applications.');
+
+INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000020, 'MongoDB', 'Maria Garcia', 'MongoDB is a document-oriented database that stores flexible JSON-like records for modern application development.');
+
+INSERT INTO articles (article_id, title, author, article) VALUES (a0000000-0000-4000-8000-000000000021, 'PostgreSQL', 'Wei Chen', 'PostgreSQL is a powerful open-source relational database with strong SQL support and ACID guarantees.');
