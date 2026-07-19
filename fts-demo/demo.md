@@ -21,21 +21,26 @@ DROP KEYSPACE IF EXISTS blog;
 
 ## 2. Keyspace
 
+Create the keyspace and select it right away so every command below needs no
+keyspace prefix.
+
 ```sql
-CREATE KEYSPACE IF NOT EXISTS blog;
+CREATE KEYSPACE blog;
+USE blog;
 ```
 
 ## 3. Table
 
 FTS rejects ANY `WHERE` restriction other than the `BM25()` clause itself (no
 partition key, clustering key, or secondary-index predicate), so `article_id` is
-the sole partition key (pure identity). `title` and `author` are carried for
-DISPLAY of results only; `author` also stands in for the filter-alongside-BM25 case
-that is rejected today (see M2). `article` is the full-text (BM25) indexed column —
-the article body.
+the sole partition key (pure identity). `title` and `author` are kept in the schema
+but no longer projected — queries return the `article` body itself so you can see
+the matched text; `author` remains for the filter-alongside-BM25 case that is
+rejected today (see M2). `article` is the full-text (BM25) indexed column — the
+article body.
 
 ```sql
-CREATE TABLE IF NOT EXISTS blog.articles (article_id uuid PRIMARY KEY, title text, author text, article text);
+CREATE TABLE articles (article_id uuid PRIMARY KEY, title text, author text, article text);
 ```
 
 ## 4. Seed data (18 articles)
@@ -48,6 +53,13 @@ so start cqlsh from `fts-demo/` (or adjust the path).
 SOURCE 'cql/data_seed.cql';
 ```
 
+Confirm the 18 rows loaded — this reads every partition, which is exactly what FTS
+lets you avoid later. It also previews all 18 short article bodies.
+
+```sql
+SELECT article FROM articles;
+```
+
 ## 5. Full-text index
 
 The fulltext index lives on the `article` text column (only supported on
@@ -57,15 +69,14 @@ that scan completes. Until then, queries return an error (the vector-store retur
 503) — **wait a few seconds before the next step.**
 
 ```sql
-CREATE CUSTOM INDEX IF NOT EXISTS articles_body_fts ON blog.articles(article) USING 'fulltext_index';
+CREATE CUSTOM INDEX articles_body_fts ON articles(article) USING 'fulltext_index';
 ```
 
-## 6. Select the keyspace
-
-Run this once so the scenario queries below need no keyspace prefix.
+Inspect the created index — this shows its target column, the `fulltext_index`
+custom class, and any options it was created with.
 
 ```sql
-USE blog;
+DESCRIBE INDEX articles_body_fts;
 ```
 
 ---
@@ -78,7 +89,7 @@ Find every article that mentions photosynthesis. Returns the Photosynthesis,
 Chlorophyll, and Oxygen articles — one query, no partition scan.
 
 ```sql
-SELECT article_id, title, author FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
 ```
 
 ### Exact phrase
@@ -88,17 +99,17 @@ where those three tokens are adjacent — the Theory of relativity and Black hol
 articles, not the Einstein one (`relativity theory`).
 
 ```sql
-SELECT article_id, title, author FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
 ```
 
 ### Relevance ranking
 
 A common term returns several rows, BM25-ranked. No score is returned, but the
-order is legible from the text — the ScyllaDB and Cassandra articles, which repeat
-`database` most, rank on top.
+order is legible from the text — only the ScyllaDB and Cassandra articles mention
+`database`, so both come back ranked by BM25.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
 ```
 
 ### Boolean AND
@@ -107,7 +118,7 @@ Both terms required. Narrows the database articles to the two that also mention
 `distributed` (ScyllaDB and Apache Cassandra).
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
 ```
 
 ### Boolean OR
@@ -116,7 +127,7 @@ Either term. Broadens to every article mentioning Jupiter or Saturn (the two
 gas-giant articles).
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'jupiter OR saturn') > 0 ORDER BY BM25(article, 'jupiter OR saturn') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'jupiter OR saturn') > 0 ORDER BY BM25(article, 'jupiter OR saturn') LIMIT 10;
 ```
 
 ### Boolean NOT
@@ -126,7 +137,7 @@ and the snake genus; excluding `snake` drops the reptile article, leaving the
 Python language and Guido van Rossum articles.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER BY BM25(article, 'python NOT snake') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER BY BM25(article, 'python NOT snake') LIMIT 10;
 ```
 
 ### Boolean mixed (with grouping)
@@ -136,7 +147,7 @@ one that is a `planet` but excludes `rings` — Saturn is dropped for its rings,
 leaving Jupiter.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, '(jupiter OR saturn) AND planet NOT rings') > 0 ORDER BY BM25(article, '(jupiter OR saturn) AND planet NOT rings') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, '(jupiter OR saturn) AND planet NOT rings') > 0 ORDER BY BM25(article, '(jupiter OR saturn) AND planet NOT rings') LIMIT 10;
 ```
 
 ### Case folding
@@ -145,7 +156,7 @@ The analyzer lowercases both the indexed text and the query, so an all-caps quer
 returns the same articles as the lowercase term in Global search.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
 ```
 
 ### Stop-word removal
@@ -155,30 +166,30 @@ English stop words (the, a, an, of, ...) are dropped by the analyzer, so
 `database` query in Relevance ranking. The added `the` is noise.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 10;
 ```
 
 ### Punctuation tokenization
 
-Punctuation is a token delimiter. The ScyllaDB article says `a wide-column store
-built for high-throughput, low-latency workloads` — the hyphens and comma split it
-into wide / column / high / throughput / low / latency. A mid-word hyphen splits,
-so `wide` (from `wide-column`) matches.
+Punctuation is a token delimiter. The ScyllaDB article says `a distributed
+wide-column database built for high-throughput, low-latency workloads` — the
+hyphens and comma split it into wide / column / high / throughput / low / latency.
+A mid-word hyphen splits, so `wide` (from `wide-column`) matches.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'wide') > 0 ORDER BY BM25(article, 'wide') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'wide') > 0 ORDER BY BM25(article, 'wide') LIMIT 10;
 ```
 
 The other half of the hyphenated word matches too: `column` (from `wide-column`).
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'column') > 0 ORDER BY BM25(article, 'column') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'column') > 0 ORDER BY BM25(article, 'column') LIMIT 10;
 ```
 
 Trailing punctuation is stripped: `throughput` matches `high-throughput,`.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'throughput') > 0 ORDER BY BM25(article, 'throughput') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'throughput') > 0 ORDER BY BM25(article, 'throughput') LIMIT 10;
 ```
 
 ---
@@ -195,7 +206,7 @@ These combine a filter with the BM25 clause. Both **fail today** with:
 author predicate would narrow them, but it cannot be combined with BM25 today.
 
 ```sql
-SELECT article_id, title, author FROM articles WHERE BM25(article, 'relativity') > 0 AND author = 'John Smith' ORDER BY BM25(article, 'relativity') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'relativity') > 0 AND author = 'John Smith' ORDER BY BM25(article, 'relativity') LIMIT 10;
 ```
 
 ### Restrict by article id
@@ -204,7 +215,7 @@ Scoping to one article by its partition key fails with the same error — the
 partition key is no exception. (The id below is the Theory of relativity article.)
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'relativity') > 0 AND article_id = a0000000-0000-4000-8000-000000000002 ORDER BY BM25(article, 'relativity') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'relativity') > 0 AND article_id = a0000000-0000-4000-8000-000000000002 ORDER BY BM25(article, 'relativity') LIMIT 10;
 ```
 
 ---
@@ -219,7 +230,7 @@ so both queries below **match nothing today**.
 `reletivity~1` should match `relativity` within one edit.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'reletivity~1') > 0 ORDER BY BM25(article, 'reletivity~1') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'reletivity~1') > 0 ORDER BY BM25(article, 'reletivity~1') LIMIT 10;
 ```
 
 ### Prefix / wildcard
@@ -228,7 +239,7 @@ SELECT article_id, title FROM articles WHERE BM25(article, 'reletivity~1') > 0 O
 not before Milestone 3.
 
 ```sql
-SELECT article_id, title FROM articles WHERE BM25(article, 'photo*') > 0 ORDER BY BM25(article, 'photo*') LIMIT 10;
+SELECT article FROM articles WHERE BM25(article, 'photo*') > 0 ORDER BY BM25(article, 'photo*') LIMIT 10;
 ```
 
 ---
