@@ -134,7 +134,7 @@ Both terms required. Narrows the five database articles to the two that also men
 `distributed` (ScyllaDB and Apache Cassandra).
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
 ```
 
 ### Boolean OR
@@ -143,7 +143,7 @@ Either term. Broadens to every article mentioning Jupiter or Saturn (the two
 gas-giant articles).
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'jupiter OR saturn') > 0 ORDER BY BM25(article, 'jupiter OR saturn') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'jupiter OR saturn') > 0 ORDER BY BM25(article, 'jupiter OR saturn') LIMIT 10;
 ```
 
 ### Boolean NOT
@@ -153,7 +153,7 @@ and the snake genus; excluding `snake` drops the reptile article, leaving the
 Python language and Guido van Rossum articles.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER BY BM25(article, 'python NOT snake') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER BY BM25(article, 'python NOT snake') LIMIT 10;
 ```
 
 ### Boolean mixed (with grouping)
@@ -163,7 +163,7 @@ one that is a `planet` but excludes `rings` — Saturn is dropped for its rings,
 leaving Jupiter.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, '(jupiter OR saturn) AND planet NOT rings') > 0 ORDER BY BM25(article, '(jupiter OR saturn) AND planet NOT rings') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '(jupiter OR saturn) AND planet NOT rings') > 0 ORDER BY BM25(article, '(jupiter OR saturn) AND planet NOT rings') LIMIT 10;
 ```
 
 ### Case folding
@@ -172,7 +172,7 @@ The analyzer lowercases both the indexed text and the query, so an all-caps quer
 returns the same articles as the lowercase term in Global search.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
 ```
 
 ### Stop-word removal
@@ -182,7 +182,7 @@ English stop words (the, a, an, of, ...) are dropped by the analyzer, so
 `database` query in Relevance ranking. The added `the` is noise.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 10;
 ```
 
 ### Punctuation tokenization
@@ -193,17 +193,17 @@ hyphens and comma split it into wide / column / high / throughput / low / latenc
 A mid-word hyphen splits, so `wide` (from `wide-column`) matches.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'wide') > 0 ORDER BY BM25(article, 'wide') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'wide') > 0 ORDER BY BM25(article, 'wide') LIMIT 10;
 ```
 
 The other half of the hyphenated word matches too: `column` (from `wide-column`).
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'column') > 0 ORDER BY BM25(article, 'column') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'column') > 0 ORDER BY BM25(article, 'column') LIMIT 10;
 ```
 
 Trailing punctuation is stripped: `throughput` matches `high-throughput,`.
 
 ```sql
-SELECT article FROM articles WHERE BM25(article, 'throughput') > 0 ORDER BY BM25(article, 'throughput') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'throughput') > 0 ORDER BY BM25(article, 'throughput') LIMIT 10;
 ```
