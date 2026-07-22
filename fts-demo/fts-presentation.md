@@ -18,11 +18,24 @@ A CQL demo — BM25 full-text & vector search
 - Vector/semantic search wins on **meaning & paraphrase**, but is **blind to tokens with no semantic content**: error codes (`E1102`), surnames, SKUs, UUIDs, config keys, function names — embeddings blur exact identifiers into noise.
 - RAG answer quality hinges on **exact-term recall**: "why do I get error E1102?" must retrieve the doc literally containing `E1102`, not the semantically "nearest" paragraph.
 - Agentic tools need **deterministic, explainable lookups** — ticket by ID, customer by surname, log line by code — where BM25 keyword match beats cosine similarity.
-- Modern retrieval is **hybrid**: BM25 (lexical/exact) + vector (semantic), fused. FTS isn't legacy — it's half of production RAG (see M2 hybrid, Slide 5).
+- Modern retrieval is **hybrid**: BM25 (lexical/exact) + vector (semantic), fused. FTS isn't legacy — it's half of production RAG (see M2 hybrid, Slide 6).
 
 ---
 
-## Slide 3 — The demo: CQL I'll run
+## Slide 3 — How BM25 scores a match
+
+```text
+score(D,Q) = Σ_t∈Q  IDF(t) · tf(t,D)·(k1+1) / ( tf(t,D) + k1·(1 − b + b·|D|/avgdl) )
+```
+
+- **Term frequency (TF)** — more occurrences of the term in the document → higher score, but with **saturation** (`k1` ≈ 1.2): the 10th occurrence adds far less than the 1st, so keyword-stuffing doesn't win.
+- **Inverse document frequency (IDF)** — terms **rare across the corpus** weigh more; a word appearing in nearly every row (a de-facto stop-word) contributes almost nothing — this is why `E1102` beats `error` in ranking.
+- **Document length normalization** — a hit in a short message counts more than the same hit in a long one; `b` ≈ 0.75 scales the penalty by the document's length relative to the **corpus average** (`avgdl`).
+- **Multi-term queries just sum per-term scores** — word order and proximity are ignored (only quoted `"phrases"` require adjacency); Tantivy uses the standard defaults `k1 = 1.2`, `b = 0.75`.
+
+---
+
+## Slide 4 — The demo: CQL I'll run
 
 - **One table, one index** — text column `message` + a custom index; creating it auto-enables CDC, then wait for `SERVING`:
   ```sql
@@ -38,7 +51,7 @@ A CQL demo — BM25 full-text & vector search
 
 ---
 
-## Slide 4 — Architecture: ScyllaDB ↔ vector-store
+## Slide 5 — Architecture: ScyllaDB ↔ vector-store
 
 ```mermaid
 flowchart LR
@@ -60,7 +73,7 @@ flowchart LR
 
 ---
 
-## Slide 5 — Future milestones
+## Slide 6 — Future milestones
 
 - **M2 — filtered & scoped FTS:** allow extra `WHERE` beside BM25 — filter by `sender_id`, scope to a `chat_id`, date ranges (the queries that fail today).
 - **M2 — hybrid search:** combine BM25 + vector ANN in one query, fused with `USING FUSION = {RRF | WEIGHTED}` — the exact-match + semantic combo RAG needs.
