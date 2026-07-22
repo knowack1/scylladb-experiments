@@ -33,24 +33,23 @@ USE blog;
 
 FTS rejects ANY `WHERE` restriction other than the `BM25()` clause itself (no
 partition key, clustering key, or secondary-index predicate), so `article_id` is
-the sole partition key (pure identity). `title` and `author` are kept in the schema
-but no longer projected — queries return the `article` body itself so you can see
-the matched text; `author` remains for the filter-alongside-BM25 case that is
-rejected today. `article` is the full-text (BM25) indexed column — the
-article body.
+the sole partition key (pure identity). `article` is the full-text (BM25) indexed
+column — the article body itself, which queries return so you can see the matched
+text. This demo only ever queries and projects those two columns, so the table
+carries nothing else.
 
 ```sql
-CREATE TABLE articles (article_id uuid PRIMARY KEY, title text, author text, article text);
+CREATE TABLE articles (article_id uuid PRIMARY KEY, article text);
 ```
 
 ## 4. Seed data (21 articles)
 
-The 21 `INSERT`s live in `cql/data_seed.cql` and are pulled in with cqlsh's `SOURCE`
+The 21 `INSERT`s live in `cql/data_seed_m1.cql` and are pulled in with cqlsh's `SOURCE`
 meta-command. The path resolves relative to the directory cqlsh was launched from,
 so start cqlsh from `fts-demo/` (or adjust the path).
 
 ```
-SOURCE 'cql/data_seed.cql';
+SOURCE 'cql/data_seed_m1.cql';
 ```
 
 Confirm the 21 rows loaded — this reads every partition, which is exactly what FTS
@@ -92,6 +91,25 @@ Chlorophyll, and Oxygen articles — one query, no partition scan.
 SELECT article_id, article FROM articles WHERE BM25(article, 'photosynthesis') > 0 ORDER BY BM25(article, 'photosynthesis') LIMIT 10;
 ```
 
+### Case folding
+
+The analyzer lowercases both the indexed text and the query, so an all-caps query
+returns the same articles as the lowercase term in Global search.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
+```
+
+### Exact phrase
+
+`relativity` alone appears in several physics articles, but the phrase only matches
+where those three tokens are adjacent — the Theory of relativity and Black hole
+articles, not the Einstein one (`relativity theory`).
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
+```
+
 ### Phrase without quotes
 
 Drop the quotation marks and the analyzer treats the input as independent tokens
@@ -105,15 +123,6 @@ below excludes precisely because its words are reversed.
 SELECT article_id, article FROM articles WHERE BM25(article, 'theory of relativity') > 0 ORDER BY BM25(article, 'theory of relativity') LIMIT 10;
 ```
 
-### Exact phrase
-
-`relativity` alone appears in several physics articles, but the phrase only matches
-where those three tokens are adjacent — the Theory of relativity and Black hole
-articles, not the Einstein one (`relativity theory`).
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, '"theory of relativity"') > 0 ORDER BY BM25(article, '"theory of relativity"') LIMIT 10;
-```
 
 ### Relevance ranking
 
@@ -128,62 +137,72 @@ text.
 SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 5;
 ```
 
-### Boolean AND
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 5;
+```
 
-Both terms required. Narrows the five database articles to the two that also mention
-`distributed` (ScyllaDB and Apache Cassandra).
+### Boolean AND — narrowing the set
+
+`AND` requires every term, so each term you add can only shrink the result set.
+Start from the simple `database` search — the same five articles as Relevance
+ranking — and watch it funnel down to one.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
+```
+
+Add `AND distributed`. Only ScyllaDB and Apache Cassandra call themselves
+distributed, so DynamoDB, MongoDB and PostgreSQL drop out — five narrows to two.
 
 ```sql
 SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
 ```
 
-### Boolean OR
+Add `AND scales`. Of those two, only the ScyllaDB article mentions scaling — the
+set narrows to one, ScyllaDB alone.
 
-Either term. Broadens to every article mentioning Jupiter or Saturn (the two
-gas-giant articles).
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed AND scales') > 0 ORDER BY BM25(article, 'database AND distributed AND scales') LIMIT 10;
+```
+
+### Boolean OR — widening the set
+
+`OR` requires only one term to match, so each term you add can only grow the result
+set. Start from the simple `jupiter` search — a single planet — and watch it fan
+out.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'jupiter') > 0 ORDER BY BM25(article, 'jupiter') LIMIT 10;
+```
+
+Add `OR saturn`. Both gas-giant planets now match — one widens to two.
 
 ```sql
 SELECT article_id, article FROM articles WHERE BM25(article, 'jupiter OR saturn') > 0 ORDER BY BM25(article, 'jupiter OR saturn') LIMIT 10;
 ```
 
-### Boolean NOT
+### Boolean NOT — narrowing by exclusion
 
-The classic disambiguation query. `python` matches both the programming language
-and the snake genus; excluding `snake` drops the reptile article, leaving the
-Python language and Guido van Rossum articles.
+`NOT` narrows from the other direction: it removes matches instead of requiring
+them. The classic disambiguation query — `python` matches both the programming
+language and the snake genus; excluding `snake` drops the reptile article, leaving
+the Python language and Guido van Rossum articles.
 
 ```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'python') > 0 ORDER BY BM25(article, 'python') LIMIT 10;
 SELECT article_id, article FROM articles WHERE BM25(article, 'python NOT snake') > 0 ORDER BY BM25(article, 'python NOT snake') LIMIT 10;
 ```
 
 ### Boolean mixed (with grouping)
 
-`AND` / `OR` / `NOT` with grouping in one query. Of the two gas giants, keep the
-one that is a `planet` but excludes `rings` — Saturn is dropped for its rings,
-leaving Jupiter.
+The capstone: `AND` / `OR` / `NOT` with grouping combined in one query. Of the two
+gas giants, keep the one that is a `planet` but excludes `rings` — Saturn is dropped
+for its rings, leaving Jupiter.
 
 ```sql
 SELECT article_id, article FROM articles WHERE BM25(article, '(jupiter OR saturn) AND planet NOT rings') > 0 ORDER BY BM25(article, '(jupiter OR saturn) AND planet NOT rings') LIMIT 10;
 ```
 
-### Case folding
-
-The analyzer lowercases both the indexed text and the query, so an all-caps query
-returns the same articles as the lowercase term in Global search.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'PHOTOSYNTHESIS') > 0 ORDER BY BM25(article, 'PHOTOSYNTHESIS') LIMIT 10;
-```
-
-### Stop-word removal
-
-English stop words (the, a, an, of, ...) are dropped by the analyzer, so
-`the database` is reduced to `database` — the identical ranked set to the bare
-`database` query in Relevance ranking. The added `the` is noise.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'the database') > 0 ORDER BY BM25(article, 'the database') LIMIT 10;
-```
 
 ### Punctuation tokenization
 
