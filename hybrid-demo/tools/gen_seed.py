@@ -64,10 +64,6 @@ HYBRID_QUERIES = [
 ]
 
 
-def article_id(index: int) -> str:
-    return f"a0000000-0000-4000-8000-{index:012d}"
-
-
 def cql_string(text: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
@@ -94,7 +90,7 @@ def generated_header(title: str, details: list[str]) -> list[str]:
 def insert_statement(index: int, body: str, embedding) -> str:
     return (
         f"INSERT INTO articles (article_id, article, embedding) VALUES "
-        f"({article_id(index)}, {cql_string(body)}, {format_vector(embedding)});"
+        f"({index}, {cql_string(body)}, {format_vector(embedding)});"
     )
 
 

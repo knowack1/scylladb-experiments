@@ -5,6 +5,9 @@ walkthrough, see [`demo.md`](demo.md).
 
 ```bash
 cd hybrid-demo
+```
+
+```bash
 cqlsh
 ```
 
@@ -16,17 +19,22 @@ Start clean.
 DROP KEYSPACE IF EXISTS blog;
 ```
 
-Create the keyspace (tablets) and switch to it.
+Create the keyspace (tablets).
 
 ```sql
 CREATE KEYSPACE blog;
+```
+
+Switch to it.
+
+```sql
 USE blog;
 ```
 
 Create the table: id, article text, and the article's embedding.
 
 ```sql
-CREATE TABLE articles (article_id uuid PRIMARY KEY, article text, embedding vector<float, 384>);
+CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 384>);
 ```
 
 Load 22 articles with precomputed embeddings.
@@ -41,10 +49,15 @@ Check the rows.
 SELECT article_id, article FROM articles;
 ```
 
-Create the fulltext and vector indexes — wait a few seconds for `SERVING`.
+Create the fulltext index.
 
 ```sql
 CREATE CUSTOM INDEX articles_body_fts ON articles(article) USING 'fulltext_index' WITH OPTIONS = {'analyzer': 'standard', 'positions': 'true'};
+```
+
+Create the vector index — then wait a few seconds for both indexes to reach `SERVING`.
+
+```sql
 CREATE CUSTOM INDEX articles_embedding_ann ON articles(embedding) USING 'vector_index';
 ```
 
@@ -101,18 +114,18 @@ SELECT article_id, BM25_HIGHLIGHT(article, 'fast database for low-latency worklo
 ## Part 2 — Vector search
 
 Search by meaning: the relational database ranks first, ScyllaDB second.
+The query vector is the embedding of the original text: "fast database for low-latency workloads".
 
 ```
--- [...] = embedding of the original text: "fast database for low-latency workloads"
 SOURCE 'cql/vector/01_low_latency_database.cql';
 ```
 
 ## Part 3 — Hybrid search
 
 Both searches fused by rank (RRF), with highlighting: ScyllaDB ranks first.
+The query vector is the embedding of the original text: "fast database for low-latency workloads".
 
 ```
--- [...] = embedding of the original text: "fast database for low-latency workloads"
 SOURCE 'cql/hybrid/01_low_latency_database.cql';
 ```
 

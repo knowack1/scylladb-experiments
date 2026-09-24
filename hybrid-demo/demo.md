@@ -51,7 +51,7 @@ column, `embedding` the vector (ANN) indexed column: the `all-MiniLM-L6-v2`
 embedding of the article text.
 
 ```sql
-CREATE TABLE articles (article_id uuid PRIMARY KEY, article text, embedding vector<float, 384>);
+CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 384>);
 ```
 
 ## 4. Seed data (22 articles, embeddings inlined)
