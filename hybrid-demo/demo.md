@@ -2,7 +2,7 @@
 
 A step-by-step, copy-paste demo over 22 short technical articles — databases,
 latency, networking, kernels, replication, storage. Each article also carries a
-384-dim embedding. One table, two indexes, three ways to search:
+16-dim embedding. One table, two indexes, three ways to search:
 
 1. **Full-text search (BM25)** — lexical matching with the Lucene/Tantivy query
    syntax: terms, phrases, `AND` / `OR` / `NOT`, grouping, highlighting.
@@ -47,11 +47,13 @@ USE blog;
 
 `article_id` is the sole partition key (pure identity) — a full-text or hybrid
 query takes no other `WHERE` restriction. `article` is the full-text (BM25) indexed
-column, `embedding` the vector (ANN) indexed column: the `all-MiniLM-L6-v2`
-embedding of the article text.
+column, `embedding` the vector (ANN) indexed column: the embedding of the article
+text. For readability the demo uses 16-dim vectors — `all-MiniLM-L6-v2`
+embeddings (384-dim) compressed with PCA fitted on these 22 articles. A production
+application sends the model's full embedding (384 to 1536+ floats).
 
 ```sql
-CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 384>);
+CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 16>);
 ```
 
 ## 4. Seed data (22 articles, embeddings inlined)
@@ -63,7 +65,7 @@ embedding, so cqlsh needs no model.
 SOURCE 'cql/data_seed.cql';
 ```
 
-Confirm the 22 rows loaded (the 384 floats are left out of the projection).
+Confirm the 22 rows loaded (the embeddings are left out of the projection).
 
 ```sql
 SELECT article_id, article FROM articles;
@@ -195,9 +197,8 @@ SELECT article_id, article FROM articles WHERE BM25(article, 'software for stori
 # Part 2 — Vector search (ANN)
 
 The query shape: order by the nearest neighbours of a query vector. The app embeds
-the user's question with the same model as the articles; here each query vector is
-precomputed and inlined in a `cql/vector/*.cql` file (384 floats are too long to
-paste), so every step is one `SOURCE`:
+the user's question with the same model as the articles; here the 16-dim query
+vector is precomputed by `tools/gen_seed.py` and inlined in the query:
 
 ```sql
 -- [...] = embedding of the user's original question text
@@ -213,14 +214,14 @@ gave each row.
 
 The same text as the highlighting query in Part 1, this time by meaning. ANN
 returns what the question is about — databases, fast storage, latency — ranked by
-overall similarity: the relational database first, ScyllaDB second, then NVMe
-drives, Tail latency, and the document database. No keyword has to match, but the
+overall similarity: the relational database first, ScyllaDB second, then Tail
+latency, the document database, and NVMe drives. No keyword has to match, but the
 exact words the user typed (`fast`, `low latency`, `workloads`) do not decide the
 order either.
 
-```
--- [...] = embedding of the original text: "fast database for low-latency workloads"
-SOURCE 'cql/vector/01_low_latency_database.cql';
+```sql
+-- vector = 16-dim embedding of the original text: "fast database for low-latency workloads"
+SELECT article_id, ANN_SCORE(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) AS similarity, article FROM articles ORDER BY ANN(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) LIMIT 5;
 ```
 
 ### Always `LIMIT` rows — no relevance cut-off
@@ -245,7 +246,6 @@ not on one scale, but "first" and "third" are.
 SELECT article_id,
        ANN_RANK(embedding, [...]) AS vector_rank,
        BM25_RANK(article, '<text>') AS text_rank,
-       BM25_HIGHLIGHT(article, '<text>') AS excerpt,
        article
   FROM articles
   ORDER BY RRF(ANN(embedding, [...]), BM25(article, '<text>')) LIMIT 5;
@@ -254,38 +254,26 @@ SELECT article_id,
 - Both legs get the **same user text**: embedded for `ANN()`, verbatim for `BM25()`.
 - No `WHERE BM25(...) > 0` — a hybrid query takes no `WHERE` clause.
 - `vector_rank` / `text_rank` show what each leg said about the row; `null` means
-  that leg did not return it, and then `excerpt` is `null` too. Each leg is asked
-  for `LIMIT` rows, and `LIMIT` cuts the fused order.
+  that leg did not return it. Each leg is asked for `LIMIT` rows, and `LIMIT`
+  cuts the fused order.
 
-### Fast database for low-latency workloads — fused, with highlighting
+### Fast database for low-latency workloads — fused
 
 The same text a third time. Part 1 ranked ScyllaDB first by keywords, Part 2
-ranked the relational database first by meaning. The hybrid query runs both legs,
-fuses their ranks, and highlights the matched words in each row:
+ranked the relational database first by meaning. The hybrid query runs both legs
+and fuses their ranks:
 
 ```sql
--- [...] = embedding of the original text: "fast database for low-latency workloads"
-SELECT article_id,
-       ANN_RANK(embedding, [...]) AS vector_rank,
-       BM25_RANK(article, 'fast database for low-latency workloads') AS text_rank,
-       BM25_HIGHLIGHT(article, 'fast database for low-latency workloads') AS excerpt,
-       article
-  FROM articles
-  ORDER BY RRF(ANN(embedding, [...]), BM25(article, 'fast database for low-latency workloads'))
-  LIMIT 5;
-```
-
-```
--- [...] = embedding of the original text: "fast database for low-latency workloads"
-SOURCE 'cql/hybrid/01_low_latency_database.cql';
+-- vector = 16-dim embedding of the original text: "fast database for low-latency workloads"
+SELECT article_id, ANN_RANK(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) AS vector_rank, BM25_RANK(article, 'fast database for low-latency workloads') AS text_rank, article FROM articles ORDER BY RRF(ANN(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]), BM25(article, 'fast database for low-latency workloads')) LIMIT 5;
 ```
 
 - ScyllaDB (vector 2nd, text 1st) comes out on top, ahead of the relational
   database (vector 1st, text 4th–5th).
-- The excerpt shows why ScyllaDB won the text leg: `fast`, `low`, `latency` and
-  `workloads` are all marked; the other databases match only `database`.
-- A row found by the vector leg alone has `text_rank` and `excerpt` `null` — there
-  is no matched word to mark.
+- ScyllaDB wins the text leg because it is the only article with `fast`,
+  `low latency` and `workloads` (see the highlighting query in Part 1); the other
+  databases match only `database`.
+- A row found by the vector leg alone has `text_rank` `null`.
 
 ### Current limitations of the hybrid build
 

@@ -34,10 +34,10 @@ USE blog;
 Create the table: id, article text, and the article's embedding.
 
 ```sql
-CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 384>);
+CREATE TABLE articles (article_id int PRIMARY KEY, article text, embedding vector<float, 16>);
 ```
 
-Load 22 articles with precomputed embeddings.
+Load 22 articles with precomputed 16-dim embeddings.
 
 ```
 SOURCE 'cql/data_seed.cql';
@@ -114,19 +114,19 @@ SELECT article_id, BM25_HIGHLIGHT(article, 'fast database for low-latency worklo
 ## Part 2 — Vector search
 
 Search by meaning: the relational database ranks first, ScyllaDB second.
-The query vector is the embedding of the original text: "fast database for low-latency workloads".
+The query vector is the 16-dim embedding of the original text: "fast database for low-latency workloads".
 
-```
-SOURCE 'cql/vector/01_low_latency_database.cql';
+```sql
+SELECT article_id, ANN_SCORE(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) AS similarity, article FROM articles ORDER BY ANN(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) LIMIT 5;
 ```
 
 ## Part 3 — Hybrid search
 
-Both searches fused by rank (RRF), with highlighting: ScyllaDB ranks first.
-The query vector is the embedding of the original text: "fast database for low-latency workloads".
+Both searches fused by rank (RRF): ScyllaDB ranks first.
+The query vector is the 16-dim embedding of the original text: "fast database for low-latency workloads".
 
-```
-SOURCE 'cql/hybrid/01_low_latency_database.cql';
+```sql
+SELECT article_id, ANN_RANK(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]) AS vector_rank, BM25_RANK(article, 'fast database for low-latency workloads') AS text_rank, article FROM articles ORDER BY RRF(ANN(embedding, [-0.15, 0.03, -0.29, -0.11, -0.15, -0.05, -0.06, 0.01, 0.09, -0.14, -0.10, -0.02, -0.07, 0.10, -0.04, -0.08]), BM25(article, 'fast database for low-latency workloads')) LIMIT 5;
 ```
 
 ## Teardown

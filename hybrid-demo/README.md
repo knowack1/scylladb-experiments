@@ -2,8 +2,9 @@
 
 One table, two indexes, three kinds of search over 22 short technical articles
 (databases, latency, networking, kernels, replication, storage). ScyllaDB is the
-only product named. Each article also carries a precomputed 384-dim
-`all-MiniLM-L6-v2` embedding, so `cqlsh` needs no embedding model.
+only product named. Each article also carries a precomputed 16-dim embedding
+(`all-MiniLM-L6-v2`, compressed with PCA so vectors stay readable in cqlsh), so
+`cqlsh` needs no embedding model.
 
 | Part | Search            | Query shape                                                        |
 | ---- | ----------------- | ------------------------------------------------------------------ |
@@ -33,12 +34,12 @@ cqlsh   # then paste the blocks from demo.md in order
 ## Layout
 
 - `demo.md` — the runbook: keyspace → table (`article_id`, `article`,
-  `embedding vector<float, 384>`) → seed → fulltext + vector index, then
+  `embedding vector<float, 16>`) → seed → fulltext + vector index, then
   Part 1 (FTS, Lucene syntax), Part 2 (vector), Part 3 (hybrid).
 - `demo-short.md` — the same runbook, commands only: one line of description per step.
 - `cql/data_seed.cql` — the 22 articles with embeddings (generated).
-- `cql/vector/*.cql` — one ANN query per scenario, query vector inlined (generated).
-- `cql/hybrid/*.cql` — one RRF query per scenario, query vector inlined (generated).
+- `cql/vector/*.cql` — the ANN query with its query vector (generated; also inlined in the runbooks).
+- `cql/hybrid/*.cql` — the RRF query with its query vector (generated; also inlined in the runbooks).
 - `tools/gen_seed.py` — the generator; the corpus and all query texts live here.
 
 ## Regenerating the seed
@@ -50,7 +51,9 @@ python tools/gen_seed.py
 
 The scenarios in `demo.md` depend on the exact wording of the articles (term
 counts for ranking, the `distributed` / `database` / `scale` funnel of Part 1) —
-re-check them after editing the corpus.
+re-check them after editing the corpus. The runbooks inline the generated vector
+and hybrid queries — copy them again from `cql/vector/` and `cql/hybrid/` after
+regenerating.
 
 ## Operational notes
 

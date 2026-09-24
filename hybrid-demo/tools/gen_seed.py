@@ -2,7 +2,8 @@
 """Generate the hybrid-search demo seed and the vector / hybrid query files.
 
 Embeds each article and each natural-language query with all-MiniLM-L6-v2
-(384-dim) and writes:
+(384-dim), compresses the embeddings to 16 dimensions with a PCA fitted on the
+articles (so the vectors stay readable in cqlsh), and writes:
 
   cql/data_seed.cql          -- INSERTs with the article embedding inlined
   cql/vector/NN_<name>.cql   -- ANN queries with the query embedding inlined
@@ -13,6 +14,9 @@ Run once (the emitted CQL is checked in, so cqlsh needs no model at runtime):
   pip install sentence-transformers
   python tools/gen_seed.py
 
+The 16-dim vectors are a demo-only compression: they are meaningful only for this
+corpus. A production application sends the model's full embedding.
+
 The corpus is 22 short technical articles (databases, latency, networking, kernels,
 replication, storage). ScyllaDB is the only product named; other databases are
 described by their data model.
@@ -20,13 +24,17 @@ described by their data model.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 CQL_DIR = Path(__file__).resolve().parent.parent / "cql"
 TOP_K = 5
+DIMENSIONS = 16
+DECIMALS = 2
 
 ARTICLES = [
     "ScyllaDB is a distributed database, a NoSQL database built for low-latency workloads at any scale, so the database stays fast as the database grows.",
@@ -68,12 +76,30 @@ def cql_string(text: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
+@dataclass(frozen=True)
+class Embedder:
+    model: SentenceTransformer
+    mean: np.ndarray
+    components: np.ndarray
+
+    @classmethod
+    def fit(cls, model: SentenceTransformer, corpus: list[str]) -> "Embedder":
+        embeddings = model.encode(corpus, normalize_embeddings=True)
+        mean = embeddings.mean(axis=0)
+        _, _, components = np.linalg.svd(embeddings - mean, full_matrices=False)
+        return cls(model, mean, components[:DIMENSIONS])
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        embeddings = self.model.encode(texts, normalize_embeddings=True)
+        return np.round((embeddings - self.mean) @ self.components.T, DECIMALS)
+
+
 def format_vector(values) -> str:
-    return "[" + ", ".join(f"{v:.6f}" for v in values) + "]"
+    return "[" + ", ".join(f"{v:.{DECIMALS}f}" for v in values) + "]"
 
 
 def embedding_comment(text: str) -> str:
-    return f"-- [...] = embedding of the original text: \"{text}\""
+    return f"-- vector = {DIMENSIONS}-dim embedding of the original text: \"{text}\""
 
 
 def generated_header(title: str, details: list[str]) -> list[str]:
@@ -105,44 +131,43 @@ def hybrid_statement(text: str, vector: str) -> str:
     keywords = cql_string(text)
     return (
         f"SELECT article_id, ANN_RANK(embedding, {vector}) AS vector_rank, "
-        f"BM25_RANK(article, {keywords}) AS text_rank, "
-        f"BM25_HIGHLIGHT(article, {keywords}) AS excerpt, article FROM articles "
+        f"BM25_RANK(article, {keywords}) AS text_rank, article FROM articles "
         f"ORDER BY RRF(ANN(embedding, {vector}), BM25(article, {keywords})) LIMIT {TOP_K};"
     )
 
 
-def write_seed(model: SentenceTransformer) -> None:
-    embeddings = model.encode(ARTICLES)
+def write_seed(embedder: Embedder) -> None:
+    embeddings = embedder.embed(ARTICLES)
     header = generated_header(
         f"seed data ({len(ARTICLES)} articles, embeddings inlined).",
-        ["", "Each row carries the all-MiniLM-L6-v2 embedding (384 floats) of its article",
-         "text, so cqlsh needs no embedding model to seed. Both indexes pick the rows",
-         "up via CDC within a few seconds of insertion."],
+        ["", f"Each row carries the {DIMENSIONS}-dim embedding of its article text (all-MiniLM-L6-v2,",
+         "compressed with PCA), so cqlsh needs no embedding model to seed. Both indexes",
+         "pick the rows up via CDC within a few seconds of insertion."],
     )
     inserts = [insert_statement(i, body, emb) for i, (body, emb) in enumerate(zip(ARTICLES, embeddings), 1)]
     CQL_DIR.mkdir(parents=True, exist_ok=True)
     (CQL_DIR / "data_seed.cql").write_text("\n".join(header + ["\n\n".join(inserts), ""]))
 
 
-def write_query_files(model: SentenceTransformer, kind: str, queries, build_statement) -> None:
+def write_query_files(embedder: Embedder, kind: str, queries, build_statement) -> None:
     target_dir = CQL_DIR / kind
     target_dir.mkdir(parents=True, exist_ok=True)
-    embeddings = model.encode([text for _, text, _ in queries])
+    embeddings = embedder.embed([text for _, text, _ in queries])
     for (name, text, note), embedding in zip(queries, embeddings):
         header = generated_header(
             f"{kind} query.",
             ["", f"Query: \"{text}\"", note, "",
-             "The vector is the all-MiniLM-L6-v2 embedding of the query text, inlined."],
+             f"The vector is the {DIMENSIONS}-dim embedding of the query text, inlined."],
         )
         statement = build_statement(text, format_vector(embedding))
         (target_dir / f"{name}.cql").write_text("\n".join(header + [embedding_comment(text), statement, ""]))
 
 
 def main() -> None:
-    model = SentenceTransformer(MODEL_NAME)
-    write_seed(model)
-    write_query_files(model, "vector", VECTOR_QUERIES, lambda _text, vector: vector_statement(vector))
-    write_query_files(model, "hybrid", HYBRID_QUERIES, hybrid_statement)
+    embedder = Embedder.fit(SentenceTransformer(MODEL_NAME), ARTICLES)
+    write_seed(embedder)
+    write_query_files(embedder, "vector", VECTOR_QUERIES, lambda _text, vector: vector_statement(vector))
+    write_query_files(embedder, "hybrid", HYBRID_QUERIES, hybrid_statement)
     print(f"Wrote {len(ARTICLES)} articles, {len(VECTOR_QUERIES)} vector and "
           f"{len(HYBRID_QUERIES)} hybrid queries to {CQL_DIR}")
 
