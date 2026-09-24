@@ -35,6 +35,7 @@ cqlsh   # then paste the blocks from demo.md in order
 - `demo.md` — the runbook: keyspace → table (`article_id`, `article`,
   `embedding vector<float, 384>`) → seed → fulltext + vector index, then
   Part 1 (FTS, Lucene syntax), Part 2 (vector), Part 3 (hybrid).
+- `demo-short.md` — the same runbook, commands only: one line of description per step.
 - `cql/data_seed.cql` — the 22 articles with embeddings (generated).
 - `cql/vector/*.cql` — one ANN query per scenario, query vector inlined (generated).
 - `cql/hybrid/*.cql` — one RRF query per scenario, query vector inlined (generated).
