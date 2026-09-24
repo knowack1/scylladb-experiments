@@ -29,9 +29,9 @@ CQL_DIR = Path(__file__).resolve().parent.parent / "cql"
 TOP_K = 5
 
 ARTICLES = [
-    "ScyllaDB is a distributed wide-column database, a NoSQL database built for high-throughput, low-latency workloads that keep the database fast as the database scales.",
+    "ScyllaDB is a distributed database, a NoSQL database built for low-latency workloads at any scale, so the database stays fast as the database grows.",
     "A wide-column store is a distributed NoSQL database design: the database groups columns into families and replicates every row, so the database has no single point of failure.",
-    "A key-value store is a fully managed database, a serverless database that scales automatically for internet-scale applications.",
+    "A key-value store is a distributed database that is fully managed and serverless, a database that grows automatically with its applications.",
     "A document database keeps flexible JSON-like records for modern application development.",
     "A relational database is a speedy, powerful engine with strong SQL support and ACID guarantees.",
     "Tail latency is the slowest one percent of requests; the p99 decides how responsive a service feels to its users.",
@@ -42,7 +42,7 @@ ARTICLES = [
     "Kernel bypass networking moves packets straight from the network card to user space, skipping the operating system.",
     "TCP guarantees ordered delivery: every lost packet is detected and retransmitted before the stream continues.",
     "UDP sends each packet once with no handshake and no retransmission, trading reliability for speed.",
-    "Raft is a consensus algorithm: a leader replicates a log to its followers, and a majority must agree before a write commits.",
+    "Raft is a consensus algorithm for distributed systems: a leader replicates a log to its followers, and a majority must agree before a write commits.",
     "Replication keeps several copies of each row on different nodes, so a node failure never makes the row unreachable.",
     "Compaction merges immutable SSTables on disk and drops overwritten and deleted rows to reclaim space.",
     "An LSM tree absorbs writes in memory, flushes them to sorted files, and merges the files later in the background.",

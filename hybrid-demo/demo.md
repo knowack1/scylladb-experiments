@@ -98,87 +98,72 @@ The query shape: the same `BM25(column, '<query>')` in `WHERE ... > 0` and in
 the Lucene syntax; terms are `OR`-ed by default. The `standard` analyzer is a
 simple tokenizer + lowercase + English stop words — **no stemming**.
 
-### Global search
+### One word — relevance ranking
 
-Every article that mentions latency — Latency spikes, Tail latency, and ScyllaDB
-(`low-latency`) — one query, no partition scan.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'latency') > 0 ORDER BY BM25(article, 'latency') LIMIT 10;
-```
-
-### Case folding
-
-The analyzer lowercases both the indexed text and the query, so an all-caps query
-returns the same three articles.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'LATENCY') > 0 ORDER BY BM25(article, 'LATENCY') LIMIT 10;
-```
-
-### Exact phrase vs. loose terms
-
-Quoted, the two tokens must be adjacent and in order — only the Tail latency
-article. Latency spikes says `latency ... at the tail`, not `tail latency`.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, '"tail latency"') > 0 ORDER BY BM25(article, '"tail latency"') LIMIT 10;
-```
-
-Unquoted, `tail` and `latency` match independently — Latency spikes (both words)
-comes first, and ScyllaDB joins on `latency` alone.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'tail latency') > 0 ORDER BY BM25(article, 'tail latency') LIMIT 10;
-```
-
-### Relevance ranking
-
-Five articles mention `database`; BM25 ranks them by how often each says it —
+Five articles mention `database`. BM25 ranks them by how often each says it —
 ScyllaDB (four times), wide-column store (three), key-value store (two), then the
 document and relational databases (once each, tied).
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 5;
+SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
 ```
 
-### Boolean AND — narrowing the set
+### Two words — `OR` by default
 
-Each `AND` term can only shrink the set: five databases → the two that are
-distributed → the one that also scales, ScyllaDB.
+Unquoted terms are `OR`-ed: an article needs only one of them. The set grows to
+seven — the three distributed databases rank first (both words), then the two
+other databases (`database` only), then Distributed tracing and Raft
+(`distributed` only).
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed AND scales') > 0 ORDER BY BM25(article, 'database AND distributed AND scales') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed database') > 0 ORDER BY BM25(article, 'distributed database') LIMIT 10;
 ```
 
-### Boolean OR — widening the set
+### Exact phrase
 
-Each `OR` term can only grow the set: one transport protocol → both.
+Quoted, the words must be adjacent and in order. Only ScyllaDB and the key-value
+store say `distributed database`; the wide-column store says `distributed NoSQL
+database` and drops out — two rows.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'tcp') > 0 ORDER BY BM25(article, 'tcp') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'tcp OR udp') > 0 ORDER BY BM25(article, 'tcp OR udp') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '"distributed database"') > 0 ORDER BY BM25(article, '"distributed database"') LIMIT 10;
 ```
 
-### Boolean NOT — disambiguation
+### Boolean AND — both words, anywhere
 
-`kernel` means three things here: the Linux kernel, a GPU kernel, and kernel
-bypass networking. `NOT gpu` drops the GPU one.
+`AND` requires every word but not their order or distance, so the wide-column
+store is back — three rows: exactly the three distributed databases.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'kernel') > 0 ORDER BY BM25(article, 'kernel') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'kernel NOT gpu') > 0 ORDER BY BM25(article, 'kernel NOT gpu') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed AND database') > 0 ORDER BY BM25(article, 'distributed AND database') LIMIT 10;
+```
+
+### Boolean AND — narrowing further
+
+Each `AND` term can only shrink the set. Of the three distributed databases, only
+ScyllaDB mentions `scale` — one row.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed AND database AND scale') > 0 ORDER BY BM25(article, 'distributed AND database AND scale') LIMIT 10;
+```
+
+### Boolean NOT — excluding
+
+`NOT` removes matches instead of requiring them: distributed, but not a database —
+Distributed tracing and Raft, the two rows the `OR` query added at the bottom.
+
+```sql
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed NOT database') > 0 ORDER BY BM25(article, 'distributed NOT database') LIMIT 10;
 ```
 
 ### Grouping — all operators in one query
 
-Of the two transport protocols, keep the one that mentions `packet` but not the
-word `handshake` — TCP. UDP is dropped even though it says `no handshake`: `NOT`
-excludes a word, not a meaning.
+Parentheses combine the operators: an article that is distributed or relational,
+and a database. The three distributed databases plus the relational one — four
+rows; the document database is the only database left out.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, '(tcp OR udp) AND packet NOT handshake') > 0 ORDER BY BM25(article, '(tcp OR udp) AND packet NOT handshake') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '(distributed OR relational) AND database') > 0 ORDER BY BM25(article, '(distributed OR relational) AND database') LIMIT 10;
 ```
 
 ### Highlighting
@@ -186,10 +171,6 @@ SELECT article_id, article FROM articles WHERE BM25(article, '(tcp OR udp) AND p
 `BM25_HIGHLIGHT()` returns a fragment of up to 150 characters with the matched
 terms wrapped in `<b>…</b>` — it shows why the row matched. The markers come back
 raw; escaping them is the application's job.
-
-```sql
-SELECT article_id, BM25_HIGHLIGHT(article, 'tail latency') AS excerpt FROM articles WHERE BM25(article, 'tail latency') > 0 ORDER BY BM25(article, 'tail latency') LIMIT 10;
-```
 
 A hyphenated query word becomes a phrase: `low-latency` is parsed as
 `"low latency"`, so only ScyllaDB matches it, and every other matched word is

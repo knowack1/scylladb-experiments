@@ -44,85 +44,58 @@ SELECT article_id, article FROM articles;
 Create the fulltext and vector indexes — wait a few seconds for `SERVING`.
 
 ```sql
-CREATE CUSTOM INDEX articles_body_fts ON articles(article) USING 'fulltext_index';
-CREATE CUSTOM INDEX articles_embedding_ann ON articles(embedding) USING 'vector_index' WITH OPTIONS = {'similarity_function': 'cosine'};
+CREATE CUSTOM INDEX articles_body_fts ON articles(article) USING 'fulltext_index' WITH OPTIONS = {'analyzer': 'standard', 'positions': 'true'};
+CREATE CUSTOM INDEX articles_embedding_ann ON articles(embedding) USING 'vector_index';
 ```
 
 ## Part 1 — Full-text search
 
-Term search: every article that mentions `latency`.
+One word: five database articles, ranked by how often each says `database`.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'latency') > 0 ORDER BY BM25(article, 'latency') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 10;
 ```
 
-Case folding: `LATENCY` returns the same rows.
+Two words, `OR` by default: any of them matches — seven rows, the distributed databases on top.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'LATENCY') > 0 ORDER BY BM25(article, 'LATENCY') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed database') > 0 ORDER BY BM25(article, 'distributed database') LIMIT 10;
 ```
 
-Exact phrase: words adjacent and in order — one row.
+Quoted phrase: the words adjacent and in order — two rows.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, '"tail latency"') > 0 ORDER BY BM25(article, '"tail latency"') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '"distributed database"') > 0 ORDER BY BM25(article, '"distributed database"') LIMIT 10;
 ```
 
-Loose terms: any of the words — three rows.
+`AND`: both words anywhere in the article — three rows.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'tail latency') > 0 ORDER BY BM25(article, 'tail latency') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed AND database') > 0 ORDER BY BM25(article, 'distributed AND database') LIMIT 10;
 ```
 
-Relevance ranking: more mentions of `database`, higher rank.
+One more `AND` term: only ScyllaDB is left.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'database') > 0 ORDER BY BM25(article, 'database') LIMIT 5;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed AND database AND scale') > 0 ORDER BY BM25(article, 'distributed AND database AND scale') LIMIT 10;
 ```
 
-`AND` narrows: 5 → 2 → 1 (ScyllaDB).
+`NOT`: distributed, but not a database — tracing and Raft.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed') > 0 ORDER BY BM25(article, 'database AND distributed') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'database AND distributed AND scales') > 0 ORDER BY BM25(article, 'database AND distributed AND scales') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, 'distributed NOT database') > 0 ORDER BY BM25(article, 'distributed NOT database') LIMIT 10;
 ```
 
-`OR` widens: 1 → 2.
+Grouping: the distributed databases plus the relational one — four rows.
 
 ```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'tcp') > 0 ORDER BY BM25(article, 'tcp') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'tcp OR udp') > 0 ORDER BY BM25(article, 'tcp OR udp') LIMIT 10;
+SELECT article_id, article FROM articles WHERE BM25(article, '(distributed OR relational) AND database') > 0 ORDER BY BM25(article, '(distributed OR relational) AND database') LIMIT 10;
 ```
 
-`NOT` excludes: three kinds of `kernel`, minus the GPU one.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'kernel') > 0 ORDER BY BM25(article, 'kernel') LIMIT 10;
-SELECT article_id, article FROM articles WHERE BM25(article, 'kernel NOT gpu') > 0 ORDER BY BM25(article, 'kernel NOT gpu') LIMIT 10;
-```
-
-Grouping: all operators in one query — TCP only.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, '(tcp OR udp) AND packet NOT handshake') > 0 ORDER BY BM25(article, '(tcp OR udp) AND packet NOT handshake') LIMIT 10;
-```
-
-Highlighting: matched words wrapped in `<b>…</b>`.
-
-```sql
-SELECT article_id, BM25_HIGHLIGHT(article, 'tail latency') AS excerpt FROM articles WHERE BM25(article, 'tail latency') > 0 ORDER BY BM25(article, 'tail latency') LIMIT 10;
-```
-
-Highlighting the query used in Parts 2 and 3: ScyllaDB ranks first by keywords.
+Highlighting: matched words wrapped in `<b>…</b>` — the query used in Parts 2 and 3; ScyllaDB ranks first by keywords.
 
 ```sql
 SELECT article_id, BM25_HIGHLIGHT(article, 'fast database for low-latency workloads') AS excerpt FROM articles WHERE BM25(article, 'fast database for low-latency workloads') > 0 ORDER BY BM25(article, 'fast database for low-latency workloads') LIMIT 5;
-```
-
-No shared words, no rows — the gap vector search fills.
-
-```sql
-SELECT article_id, article FROM articles WHERE BM25(article, 'software for storing and querying data') > 0 ORDER BY BM25(article, 'software for storing and querying data') LIMIT 5;
 ```
 
 ## Part 2 — Vector search

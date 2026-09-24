@@ -49,8 +49,8 @@ python tools/gen_seed.py
 ```
 
 The scenarios in `demo.md` depend on the exact wording of the articles (term
-counts for ranking, `distributed` / `scales` for the `AND` funnel, `kernel` for
-`NOT`) — re-check them after editing the corpus.
+counts for ranking, the `distributed` / `database` / `scale` funnel of Part 1) —
+re-check them after editing the corpus.
 
 ## Operational notes
 
